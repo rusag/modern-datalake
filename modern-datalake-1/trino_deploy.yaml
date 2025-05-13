@@ -1,0 +1,62 @@
+# Trino Deployment & Service
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-catalogs
+data:
+  iceberg.properties: |
+    connector.name=iceberg
+    iceberg.catalog.type=nessie
+    iceberg.nessie-catalog.uri=http://nessie:19120/api/v2
+    iceberg.nessie-catalog.ref=main
+    iceberg.nessie-catalog.default-warehouse-dir=s3a://warehouse/
+    fs.native-s3.enabled=true
+    s3.endpoint=http://minio:9000
+    s3.region=us-east-1
+    s3.path-style-access=true
+    s3.aws-access-key=admin
+    s3.aws-secret-key=password
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trino
+  template:
+    metadata:
+      labels:
+        app: trino
+    spec:
+      containers:
+        - name: trino
+          image: trinodb/trino:latest
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: trino-catalogs
+              mountPath: /etc/trino/catalog/iceberg.properties
+              subPath: iceberg.properties
+              readOnly: true
+      volumes:
+        - name: trino-catalogs
+          configMap:
+            name: trino-catalogs
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trino
+spec:
+  type: NodePort
+  ports:
+    - name: trino-http
+      port: 8080
+      targetPort: 8080
+      nodePort: 30808
+  selector:
+    app: trino
